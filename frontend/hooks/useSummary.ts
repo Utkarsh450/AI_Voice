@@ -16,5 +16,7 @@ export const useSummary = (
         sessionId!
       ),
     enabled: !!sessionId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    refetchOnWindowFocus: false,
   });
 };

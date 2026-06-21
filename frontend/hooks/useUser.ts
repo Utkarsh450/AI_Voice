@@ -19,4 +19,6 @@ export const useUser = (
 
     enabled:
       !!userId,
+    staleTime: 15 * 1000, // 15 seconds
+    refetchOnWindowFocus: false,
   });

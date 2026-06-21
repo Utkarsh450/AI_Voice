@@ -87,68 +87,73 @@ export default function Sidebar({
   return (
     <aside
       className={`
-        border-r border-slate-800
-        bg-slate-900/70
+        border-r border-slate-900
+        bg-slate-950/90
         backdrop-blur-xl
         overflow-hidden
         transition-all
         duration-300
         flex flex-col
-        ${open ? "w-[340px]" : "w-24"}
+        ${open ? "w-[340px]" : "w-20"}
       `}
     >
-      <div className="border-b border-slate-800 px-6 py-5">
+      <div className="border-b border-slate-900 px-5 py-5">
         <div className="flex items-center justify-between">
           {open && (
             <div>
-              <h1 className="text-xl font-bold text-white">Voice AI</h1>
-
-              <p className="text-sm text-slate-400">AI Conversations</p>
+              <h1 className="text-lg font-extrabold text-white tracking-tight">Voice Agent</h1>
+              <p className="text-xs text-slate-500 font-semibold mt-0.5">Call Center playground</p>
             </div>
           )}
 
           <button
             onClick={onToggle}
             className="
-      rounded-xl
-      border border-slate-800
-      p-2
-      text-slate-400
-      transition
-      hover:bg-slate-800
-      hover:text-white
-    "
+              rounded-xl
+              border border-slate-900
+              p-2
+              text-slate-400
+              transition-all
+              hover:bg-slate-900
+              hover:text-white
+              cursor-pointer
+            "
           >
-            <PanelLeftClose size={18} />
+            <PanelLeftClose size={16} />
           </button>
         </div>
 
         <button
           onClick={handleNewSession}
           className="
-mt-5
-flex w-full
-items-center justify-center
-gap-2
-rounded-2xl
-bg-gradient-to-r
-from-blue-600
-to-indigo-600
-px-4 py-3
-font-medium
-shadow-lg
-shadow-blue-500/20
-transition
-hover:scale-[1.02]
-"
+            mt-5
+            flex w-full
+            items-center justify-center
+            gap-2
+            rounded-2xl
+            bg-gradient-to-r
+            from-orange-500
+            to-amber-600
+            px-4 py-3
+            font-bold
+            text-xs
+            uppercase
+            tracking-wider
+            shadow-lg
+            shadow-orange-500/10
+            transition-all
+            hover:scale-[1.01]
+            hover:shadow-orange-500/20
+            cursor-pointer
+            text-white
+          "
         >
-          <Plus size={18} />
-
-          {open && "New Session"}
+          <Plus size={16} />
+          {open && "New Call Session"}
         </button>
 
         {open && (
-          <div className="mt-5">
+          <div className="mt-4">
             <SessionSearch value={search} onChange={setSearch} />
           </div>
         )}

@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+from pydantic import BaseModel
 from services.session_service import (
     session_service
 )
@@ -22,14 +23,26 @@ async def get_sessions():
         .get_sessions()
     )
 
+
+class SessionCreate(BaseModel):
+    participant_identity: str = "test-user"
+    persona: str = "default"
+
+
 @router.post("/")
-async def create_session():
+async def create_session(body: SessionCreate = None):
+    identity = "test-user"
+    persona_name = "default"
+    if body:
+        identity = body.participant_identity or "test-user"
+        persona_name = body.persona or "default"
 
     session = (
         await session_service
         .create_session(
             room_name="Pending",
-            participant_identity="test-user",
+            participant_identity=identity,
+            persona=persona_name,
         )
     )
 

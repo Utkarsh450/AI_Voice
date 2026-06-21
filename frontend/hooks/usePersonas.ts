@@ -11,5 +11,7 @@ export function usePersonas() {
     queryFn:
       adminService
         .getPersonas,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchOnWindowFocus: false,
   });
 }

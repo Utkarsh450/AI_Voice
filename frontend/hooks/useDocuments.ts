@@ -11,5 +11,7 @@ export function useDocuments() {
     queryFn:
       adminService
         .getDocuments,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+    refetchOnWindowFocus: false,
   });
 }

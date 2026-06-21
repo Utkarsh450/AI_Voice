@@ -75,7 +75,7 @@ export const adminService = {
     ) => {
       const { data } =
         await api.get(
-          `/admin/user/${userId}`
+          `/admin/users/${userId}`
         );
 
       return data;

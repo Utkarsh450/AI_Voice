@@ -13,5 +13,7 @@ export const useSession = (
         sessionId!
       ),
     enabled: !!sessionId,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: false,
   });
 };

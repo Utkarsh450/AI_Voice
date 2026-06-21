@@ -11,5 +11,7 @@ export function useUsers() {
     queryFn:
       adminService
         .getUsers,
+    staleTime: 15 * 1000, // 15 seconds
+    refetchOnWindowFocus: false,
   });
 }

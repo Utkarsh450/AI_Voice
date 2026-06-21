@@ -16,5 +16,7 @@ export function useMessages(
         sessionId!
       ),
     enabled: !!sessionId,
+    staleTime: 10 * 1000, // 10 seconds
+    refetchOnWindowFocus: false,
   });
 }

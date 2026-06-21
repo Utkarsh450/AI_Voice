@@ -8,9 +8,9 @@ Before building AI, we need a foundation.
 
 Eventually our flow will be:
 
-Customer Phone
+Customer Browser
 ↓
-Twilio
+LiveKit WebRTC
 ↓
 FastAPI Backend
 ↓
@@ -34,7 +34,7 @@ No LangGraph yet.
 
 No RAG yet.
 
-No Twilio yet.
+No Twilio (Out of scope).
 
 ---
 
@@ -600,8 +600,6 @@ Create Session APIs
 
 Only after this foundation is stable will we move to:
 
-Twilio
-↓
 Whisper
 ↓
 LangGraph

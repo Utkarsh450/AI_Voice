@@ -34,16 +34,14 @@ class SessionService:
         if not session:
             return None
 
-        ended_at = datetime.now(
-            timezone.utc
-        )
+        ended_at = datetime.now(timezone.utc)
+        started_at = session.startedAt
 
-        duration = int(
-            (
-                ended_at -
-                session.startedAt
-            ).total_seconds()
-        )
+        # Normalize datetimes to naive UTC for safe offset-naive subtraction
+        started_at_naive = started_at.astimezone(timezone.utc).replace(tzinfo=None) if started_at.tzinfo is not None else started_at
+        ended_at_naive = ended_at.astimezone(timezone.utc).replace(tzinfo=None)
+
+        duration = int((ended_at_naive - started_at_naive).total_seconds())
 
         updated = await db.session.update(
             where={

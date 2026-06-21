@@ -11,5 +11,7 @@ export function usePersonaDistribution() {
     queryFn:
       adminService
         .getPersonaDistribution,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: false,
   });
 }

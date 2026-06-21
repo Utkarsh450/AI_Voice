@@ -11,5 +11,7 @@ export function useRecentSessions() {
     queryFn:
       adminService
         .getRecentSessions,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: false,
   });
 }

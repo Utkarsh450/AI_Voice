@@ -40,10 +40,14 @@ export const sessionService = {
 
     return data;
   },
-  createSession: async () => {
+  createSession: async (participantIdentity?: string, persona?: string) => {
     const { data } =
       await api.post(
-        "/sessions"
+        "/sessions",
+        {
+          participant_identity: participantIdentity,
+          persona: persona
+        }
       );
 
     return data;

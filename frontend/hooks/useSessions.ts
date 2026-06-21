@@ -7,5 +7,7 @@ export const useSessions = () => {
   return useQuery({
     queryKey: ["sessions"],
     queryFn: sessionService.getSessions,
+    staleTime: 15 * 1000, // 15 seconds
+    refetchOnWindowFocus: false,
   });
 };

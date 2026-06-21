@@ -11,5 +11,7 @@ export function useTopUsers() {
     queryFn:
       adminService
         .getTopUsers,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: false,
   });
 }

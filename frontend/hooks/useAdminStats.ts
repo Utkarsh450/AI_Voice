@@ -10,5 +10,7 @@ export function useAdminStats() {
     ],
     queryFn:
       adminService.getStats,
+    staleTime: 30 * 1000, // 30 seconds
+    refetchOnWindowFocus: false,
   });
 }

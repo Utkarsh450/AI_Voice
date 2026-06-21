@@ -13,12 +13,22 @@ export function useVoiceRoom() {
   const queryClient = useQueryClient();
 
   const [connected, setConnected] = useState(false);
-
   const [callState, setCallState] = useState<CallState>("idle");
+  const [isMuted, setIsMuted] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [agentConnected, setAgentConnected] = useState(false);
 
+  const toggleMute = async () => {
+    if (roomRef.current) {
+      const nextMute = !isMuted;
+      await roomRef.current.localParticipant.setMicrophoneEnabled(!nextMute);
+      setIsMuted(nextMute);
+    }
+  };
 
   const connect = async (sessionId: number) => {
     try {
+      setConnecting(true);
       await livekitService.dispatchAgent(sessionId);
        console.log(
     "CONNECT CALLED:",
@@ -35,6 +45,8 @@ export function useVoiceRoom() {
         console.log("Room Connected");
 
         setConnected(true);
+        setConnecting(false);
+        setAgentConnected(room.remoteParticipants.size > 0);
         setCallState("listening");
       });
 
@@ -42,7 +54,22 @@ export function useVoiceRoom() {
         console.log("Room Disconnected");
 
         setConnected(false);
+        setConnecting(false);
+        setAgentConnected(false);
         setCallState("idle");
+        setIsMuted(false);
+      });
+
+      room.on(RoomEvent.ParticipantConnected, (p) => {
+        console.log("Participant Connected:", p.identity);
+        setAgentConnected(true);
+      });
+
+      room.on(RoomEvent.ParticipantDisconnected, (p) => {
+        console.log("Participant Disconnected:", p.identity);
+        if (room.remoteParticipants.size === 0) {
+          setAgentConnected(false);
+        }
       });
 
       room.on(RoomEvent.TrackSubscribed, (track) => {
@@ -74,6 +101,7 @@ export function useVoiceRoom() {
       await room.connect(url, token);
 
       await room.localParticipant.setMicrophoneEnabled(true);
+      setIsMuted(false);
 
       setTimeout(() => {
   queryClient.invalidateQueries({
@@ -83,6 +111,7 @@ export function useVoiceRoom() {
 
     } catch (error) {
       console.error("Voice connection error:", error);
+      setConnecting(false);
     }
   };
 
@@ -91,7 +120,10 @@ export function useVoiceRoom() {
     roomRef.current = null;
 
     setConnected(false);
+    setConnecting(false);
+    setAgentConnected(false);
     setCallState("idle");
+    setIsMuted(false);
   };
 
   useEffect(() => {
@@ -111,5 +143,9 @@ export function useVoiceRoom() {
     callState,
     connect,
     disconnect,
+    isMuted,
+    toggleMute,
+    connecting,
+    agentConnected,
   };
 }

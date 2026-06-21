@@ -1,6 +1,7 @@
 "use client";
 
 import { useSummary } from "@/hooks/useSummary";
+import { FileText, CheckSquare, Brain, HelpCircle, Activity } from "lucide-react";
 
 interface Props {
   sessionId: number | null;
@@ -8,42 +9,79 @@ interface Props {
 
 export default function SummaryCard({ sessionId }: Props) {
   const { data, isLoading } = useSummary(sessionId);
-  const messages = Array.isArray(data)
-  ? data
-  : [];
-  console.log("Message", data);
-  
-  
 
   return (
-    <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-      <h3 className="mb-4 text-lg font-semibold text-white">Summary</h3>
+    <div className="rounded-3xl border border-slate-900 bg-slate-950/40 p-5 shadow-sm space-y-4">
+      <div className="flex items-center gap-2 border-b border-slate-900 pb-3.5">
+        <Brain className="text-orange-500" size={16} />
+        <h3 className="text-sm font-extrabold text-white tracking-wider uppercase">AI Analysis</h3>
+      </div>
 
-      {isLoading && <p className="text-slate-400">Loading...</p>}
+      {isLoading && (
+        <div className="py-6 flex flex-col items-center justify-center gap-2 text-slate-500 animate-pulse">
+          <Activity className="animate-spin text-orange-500" size={16} />
+          <span className="text-xs">Loading analysis...</span>
+        </div>
+      )}
 
       {!isLoading && !data && (
-        <p className="text-slate-400">
-          Summary will appear after the call ends.
+        <p className="text-xs text-slate-500 text-center py-6 leading-relaxed">
+          Analysis summary and memories will compile here once the call session completes.
         </p>
       )}
 
       {data && (
-        <>
-          <p className="text-sm text-slate-200">{data.summary}</p>
+        <div className="space-y-4.5">
+          {/* Summary Section */}
+          <div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-extrabold uppercase tracking-wider mb-2">
+              <FileText size={13} className="text-slate-500" />
+              <span>Summary</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed font-normal p-3 rounded-xl bg-slate-900/30 border border-slate-900/60 whitespace-pre-wrap">
+              {data.summary || "No summary recorded."}
+            </p>
+          </div>
 
-          {data?.actionItems?.length > 0 && (
-            <div className="mt-5">
-              <p className="mb-2 text-sm font-semibold text-white">
-                Action Items
+          {/* User Facts Section */}
+          {data.userFacts && (
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 font-extrabold uppercase tracking-wider mb-2">
+                <Brain size={13} className="text-slate-500" />
+                <span>Extracted Facts</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed font-normal p-3 rounded-xl bg-slate-900/30 border border-slate-900/60 whitespace-pre-wrap">
+                {data.userFacts}
               </p>
-
-              <ul className="space-y-2 text-sm text-slate-300">
-                  <li>• {data.actionItems}</li>
-                
-              </ul>
             </div>
           )}
-        </>
+
+          {/* Action Items Section */}
+          {data.actionItems && (
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 font-extrabold uppercase tracking-wider mb-2">
+                <CheckSquare size={13} className="text-slate-500" />
+                <span>Action Items</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed font-normal p-3 rounded-xl bg-slate-900/30 border border-slate-900/60 whitespace-pre-wrap">
+                {data.actionItems}
+              </p>
+            </div>
+          )}
+
+          {/* Open Questions Section */}
+          {data.openItems && (
+            <div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-400 font-extrabold uppercase tracking-wider mb-2">
+                <HelpCircle size={13} className="text-slate-500" />
+                <span>Open Questions</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed font-normal p-3 rounded-xl bg-slate-900/30 border border-slate-900/60 whitespace-pre-wrap">
+                {data.openItems}
+              </p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

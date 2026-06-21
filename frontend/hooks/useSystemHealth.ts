@@ -9,5 +9,7 @@ export const useSystemHealth =
       queryKey: ["health"],
       queryFn:
         adminService.getHealth,
-      refetchInterval: 5000,
+      staleTime: 8000,
+      refetchInterval: 10000,
+      refetchOnWindowFocus: false,
     });

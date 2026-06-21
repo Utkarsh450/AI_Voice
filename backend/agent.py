@@ -1,5 +1,8 @@
 from dotenv import load_dotenv
+load_dotenv()
+
 from database.prisma_client import db
+# pyrefly: ignore [missing-import]
 from livekit.agents import (
     Agent,
     AgentSession,
@@ -7,6 +10,7 @@ from livekit.agents import (
     WorkerOptions,
     cli,
 )
+# pyrefly: ignore [missing-import]
 from livekit.plugins import openai, silero
 from services.session_service import session_service
 from services.message_service import message_service
@@ -26,8 +30,6 @@ from services.event_publisher import (
 )
 
 import asyncio
-
-load_dotenv()
 
 
 class Assistant(Agent):
@@ -63,10 +65,13 @@ async def entrypoint(ctx: JobContext):
     # -----------------------------
     # Connect Prisma
     # -----------------------------
-    try:
-        await db.connect()
-        print("DB Connected")
-    except Exception:
+    if not db.is_connected():
+        try:
+            await db.connect()
+            print("DB Connected")
+        except Exception as e:
+            print(f"Failed to connect to DB: {e}")
+    else:
         print("DB Already Connected")
 
     print(f"Joining room: {ctx.room.name}")
@@ -184,10 +189,12 @@ async def entrypoint(ctx: JobContext):
     session = AgentSession(
         vad=silero.VAD.load(),
         stt=openai.STT(),
-        llm=openai.LLM(),
+        llm=openai.LLM(model="gpt-4o-mini"),
         tts=openai.TTS(
-            voice="coral",
-        )
+            model="tts-1",
+            voice="alloy",
+        ),
+        preemptive_generation=True,
     )
             
 
@@ -196,6 +203,8 @@ async def entrypoint(ctx: JobContext):
     # -----------------------------
     async def save_message(event):
         try:
+            if not db.is_connected():
+                await db.connect()
             print("EVENT:", event)
 
             item = getattr(
@@ -372,19 +381,12 @@ async def entrypoint(ctx: JobContext):
                 f"Error closing session: {e}"
             )
 
-        finally:
-            try:
-                await db.disconnect()
-                print("DB Disconnected")
-            except Exception:   
-                pass
-
     @ctx.room.on("disconnected")
     def on_disconnect(*args):
-        asyncio.create_task(
-            close_db_session()
-        )
-        disconnect_event.set()
+        async def handle():
+            await close_db_session()
+            disconnect_event.set()
+        asyncio.create_task(handle())
 
     # -----------------------------
     # Start Voice Agent
@@ -423,7 +425,12 @@ async def entrypoint(ctx: JobContext):
     # -----------------------------
     # Keep worker alive
     # -----------------------------
-    await disconnect_event.wait()
+    try:
+        await disconnect_event.wait()
+    finally:
+        if db.is_connected():
+            await db.disconnect()
+            print("DB Disconnected")
 
 
 if __name__ == "__main__":
