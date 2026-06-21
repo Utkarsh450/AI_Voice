@@ -37,10 +37,12 @@ class Assistant(Agent):
     def __init__(
         self,
         memory_context: str = "",
+        session_id: int = 0
     ):
+        self.session_id = session_id
         super().__init__(
             instructions=f"""
-You are a helpful AI assistant.
+You are the Receptionist AI for our platform.
 
 The following information is factual memory about the user.
 
@@ -51,33 +53,38 @@ Rules:
 - Remember user preferences.
 - Remember personal facts.
 - Use this memory naturally.
-- Never say:
-  "I don't remember."
-  "I don't have access."
-  "I cannot recall."
 
 Speak naturally.
 Keep responses short.
 
-IMPORTANT TOOL USAGE:
-If the user asks ANY question about documents, resumes, projects, facts, policies, or specific knowledge that you don't instantly know, YOU MUST USE the 'search_knowledge_base' function to find the answer. Do not say you don't know without querying the knowledge base first!
+IMPORTANT TOOL USAGE (MULTI-AGENT ROUTING):
+If the user asks ANY complex question, requires domain expertise, asks about uploaded documents, HR policies, billing, technical support, or any topic that requires a specialized Persona, YOU MUST USE the 'consult_specialist_network' function.
+Do NOT try to answer complex or domain-specific questions yourself. Always route them to the specialist network.
+
+CRITICAL LATENCY RULE: When the 'consult_specialist_network' function returns an answer, you MUST speak that exact answer verbatim to the user IMMEDIATELY. Do not add introductory words like "The specialist says...". Do not summarize. Just output the exact answer so it can be spoken to the user as fast as possible.
 """
         )
 
-    @llm.function_tool(description="Search the knowledge base for answers to user questions about documents, resumes, policies, domain knowledge, or facts.")
-    async def search_knowledge_base(
+    @llm.function_tool(description="Consult the network of specialized AI Agents to answer complex queries or document searches.")
+    async def consult_specialist_network(
         self,
         query: str,
     ):
-        """Search the knowledge base for answers to user questions."""
-        print(f"Searching knowledge base for: {query}")
+        """Send the user's query to the LangGraph Supervisor to be routed to a specialized Persona."""
+        print(f"Routing to specialist network: {query}")
         try:
-            from services.rag_service import rag_service
-            answer = await rag_service.query_knowledge_base(query)
-            return f"Knowledge Base Answer: {answer}"
+            from services.multi_agent_service import run_specialist_network
+            from services.message_service import message_service
+            
+            # Fetch recent chat history for context
+            messages = await message_service.get_session_messages(self.session_id)
+            history = [{"role": m.speaker.lower(), "content": m.content} for m in messages[-5:]]
+            
+            answer = await run_specialist_network(query, history)
+            return f"Specialist Agent Answer: {answer}"
         except Exception as e:
-            print(f"Error querying KB: {e}")
-            return "Sorry, I could not retrieve information from the knowledge base at this moment."
+            print(f"Error in specialist network: {e}")
+            return "Sorry, the specialist network is currently unavailable."
 
 
 async def entrypoint(ctx: JobContext):
@@ -425,7 +432,8 @@ async def entrypoint(ctx: JobContext):
     )
     await session.start(
     agent=Assistant(
-        combined_memory
+        combined_memory,
+        db_session.id
     ),
     room=ctx.room,
 )

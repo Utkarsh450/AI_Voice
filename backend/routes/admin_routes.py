@@ -162,6 +162,8 @@ from fastapi import UploadFile, File, HTTPException
 import os
 import shutil
 from database.prisma_client import db
+from services.analytics_service import analytics_service
+import services.settings_service as settings_service
 from services.rag_service import rag_service
 from services.imagekit_service import upload_document as upload_document_to_imagekit
 
@@ -215,4 +217,42 @@ async def get_documents():
     docs = await db.document.find_many(
         order={"uploadedAt": "desc"}
     )
-    return docs
+    return docs
+
+# ==========================
+# Personas
+# ==========================
+import services.persona_service as persona_service
+
+@router.get("/personas")
+async def get_personas():
+    return await persona_service.get_all_personas()
+
+@router.post("/personas")
+async def create_persona(data: persona_service.PersonaCreate):
+    return await persona_service.create_persona(data)
+
+@router.put("/personas/{persona_id}")
+async def update_persona(persona_id: int, data: persona_service.PersonaUpdate):
+    return await persona_service.update_persona(persona_id, data)
+
+@router.delete("/personas/{persona_id}")
+async def delete_persona(persona_id: int):
+    result = await persona_service.delete_persona(persona_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    return {"message": "Persona deleted"}
+
+# --- Analytics Routes ---
+@router.get("/analytics/dashboard")
+async def get_analytics_dashboard():
+    return await analytics_service.get_dashboard_stats()
+
+# --- Settings Routes ---
+@router.get("/settings")
+async def get_settings():
+    return await settings_service.get_all_settings()
+
+@router.put("/settings/{key}")
+async def update_setting(key: str, data: settings_service.SettingUpdate):
+    return await settings_service.update_setting(key, data.value)

@@ -21,6 +21,7 @@ from services.event_subscriber import (
 from routes.admin_routes import (
     router as admin_router
 )
+from services.settings_service import init_default_settings
 
 app = FastAPI(
     title="AI Voice Call Center API",
@@ -28,10 +29,7 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,6 +41,7 @@ async def startup():
     print("Connecting...")
     await db.connect()
     print("Connected to DB")
+    await init_default_settings()
     asyncio.create_task(
         start_subscriber()
     )
