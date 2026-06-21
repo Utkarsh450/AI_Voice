@@ -153,3 +153,66 @@ async def get_health():
             await admin_service
             .groq_status(),
     }
+
+
+# ==========================
+# Knowledge Base
+# ==========================
+from fastapi import UploadFile, File, HTTPException
+import os
+import shutil
+from database.prisma_client import db
+from services.rag_service import rag_service
+from services.imagekit_service import upload_document as upload_document_to_imagekit
+
+@router.post("/knowledge/upload")
+async def upload_document(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+        
+    os.makedirs("uploads", exist_ok=True)
+    file_path = f"uploads/{file.filename}"
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    try:
+        # Upload to ImageKit
+        imagekit_url = upload_document_to_imagekit(file_path)
+
+        # Create DB record
+        doc = await db.document.create(
+            data={
+                "name": file.filename,
+                "path": imagekit_url,
+                "processed": False
+            }
+        )
+        
+        # Ingest document into vector store
+        chunks = await rag_service.ingest_document(file_path)
+        
+        # Update DB record
+        await db.document.update(
+            where={"id": doc.id},
+            data={"processed": True}
+        )
+        
+        # Remove local file after successful ingestion
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            
+        return {"message": "Document uploaded and processed successfully.", "chunks": chunks, "document": doc}
+    except Exception as e:
+        print(f"Error processing document: {e}")
+        # Cleanup local file on error
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/knowledge/documents")
+async def get_documents():
+    docs = await db.document.find_many(
+        order={"uploadedAt": "desc"}
+    )
+    return docs

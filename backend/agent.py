@@ -9,9 +9,10 @@ from livekit.agents import (
     JobContext,
     WorkerOptions,
     cli,
+    llm,
 )
 # pyrefly: ignore [missing-import]
-from livekit.plugins import openai, silero
+from livekit.plugins import openai
 from services.session_service import session_service
 from services.message_service import message_service
 from services.user_memory_service import (
@@ -57,8 +58,26 @@ Rules:
 
 Speak naturally.
 Keep responses short.
+
+IMPORTANT TOOL USAGE:
+If the user asks ANY question about documents, resumes, projects, facts, policies, or specific knowledge that you don't instantly know, YOU MUST USE the 'search_knowledge_base' function to find the answer. Do not say you don't know without querying the knowledge base first!
 """
         )
+
+    @llm.function_tool(description="Search the knowledge base for answers to user questions about documents, resumes, policies, domain knowledge, or facts.")
+    async def search_knowledge_base(
+        self,
+        query: str,
+    ):
+        """Search the knowledge base for answers to user questions."""
+        print(f"Searching knowledge base for: {query}")
+        try:
+            from services.rag_service import rag_service
+            answer = await rag_service.query_knowledge_base(query)
+            return f"Knowledge Base Answer: {answer}"
+        except Exception as e:
+            print(f"Error querying KB: {e}")
+            return "Sorry, I could not retrieve information from the knowledge base at this moment."
 
 
 async def entrypoint(ctx: JobContext):
@@ -187,7 +206,6 @@ async def entrypoint(ctx: JobContext):
     # Create Voice Agent
     # -----------------------------
     session = AgentSession(
-        vad=silero.VAD.load(),
         stt=openai.STT(),
         llm=openai.LLM(model="gpt-4o-mini"),
         tts=openai.TTS(

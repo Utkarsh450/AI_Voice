@@ -8,38 +8,26 @@ load_dotenv()
 imagekit = ImageKit(
     private_key=os.getenv(
         "IMAGEKIT_PRIVATE_KEY"
-    ),
-    public_key=os.getenv(
-        "IMAGEKIT_PUBLIC_KEY"
-    ),
-    url_endpoint=os.getenv(
-        "IMAGEKIT_URL_ENDPOINT"
-    ),
+    )
 )
 
 
-def upload_audio(
-    file_path: str,
-):
-    with open(
-        file_path,
-        "rb",
-    ) as f:
-        encoded = (
-            base64.b64encode(
-                f.read()
-            ).decode()
+def upload_audio(file_path: str):
+    with open(file_path, "rb") as f:
+        response = imagekit.files.upload(
+            file=f,
+            file_name=os.path.basename(file_path),
+            folder="/recordings"
         )
 
-    response = imagekit.upload_file(
-        file=encoded,
-        file_name=os.path.basename(
-            file_path
-        ),
-        options={
-            "folder":
-            "/recordings"
-        },
-    )
+    return response.url
+
+def upload_document(file_path: str):
+    with open(file_path, "rb") as f:
+        response = imagekit.files.upload(
+            file=f,
+            file_name=os.path.basename(file_path),
+            folder="/documents"
+        )
 
     return response.url
