@@ -7,6 +7,7 @@ import { useSession } from "@/hooks/useSession";
 import { useMessages } from "@/hooks/userMessages";
 import { useSummary } from "@/hooks/useSummary";
 import GlassCard from "@/components/admin/GlassCard";
+import RecordingCard from "@/components/session/RecordingCard";
 import {
   Phone,
   User,
@@ -267,6 +268,9 @@ function SessionExplorerContent() {
                 </>
               )}
             </GlassCard>
+
+            {/* RECORDING PLAYER */}
+            <RecordingCard sessionId={selectedId} />
 
             {/* SPLIT PANEL CONTENT */}
             <div className="flex-1 flex flex-col md:flex-row gap-6 overflow-hidden min-h-0">

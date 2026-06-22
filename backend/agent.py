@@ -31,6 +31,86 @@ from services.event_publisher import (
 )
 
 import asyncio
+import wave
+import struct
+import os
+from livekit import rtc
+
+class AudioBufferMixer:
+    def __init__(self, sample_rate=16000):
+        self.sample_rate = sample_rate
+        self.buffer = []
+        self.start_time = None
+        self.next_sample_indices = {} # track_sid -> next_sample_index
+        self._lock = asyncio.Lock()
+
+    def start(self):
+        self.start_time = asyncio.get_event_loop().time()
+
+    async def add_audio(self, track_sid: str, pcm_bytes: bytes, timestamp: float):
+        if self.start_time is None:
+            return
+            
+        # Calculate target offset in samples based on timestamp
+        offset_sec = timestamp - self.start_time
+        if offset_sec < 0:
+            offset_sec = 0
+            
+        target_idx = int(offset_sec * self.sample_rate)
+        
+        # Unpack 16-bit signed PCM bytes
+        num_samples = len(pcm_bytes) // 2
+        if num_samples == 0:
+            return
+            
+        incoming_samples = struct.unpack(f"<{num_samples}h", pcm_bytes)
+        
+        async with self._lock:
+            # Determine start index using jitter buffer logic
+            last_idx = self.next_sample_indices.get(track_sid)
+            if last_idx is None:
+                start_idx = target_idx
+            else:
+                # If difference is small (less than 150ms), stitch contiguously to avoid gaps/pops
+                diff = abs(target_idx - last_idx)
+                max_jitter_samples = int(0.150 * self.sample_rate)
+                if diff < max_jitter_samples:
+                    start_idx = last_idx
+                else:
+                    start_idx = target_idx
+
+            # Ensure our buffer is large enough
+            end_idx = start_idx + num_samples
+            if len(self.buffer) < end_idx:
+                # Fill the gap with silence (zeros)
+                self.buffer.extend([0] * (end_idx - len(self.buffer)))
+                
+            # Mix the samples
+            for i in range(num_samples):
+                idx = start_idx + i
+                mixed = self.buffer[idx] + incoming_samples[i]
+                # Clip to 16-bit signed integer limits
+                self.buffer[idx] = max(-32768, min(32767, mixed))
+                
+            # Update the next sample index for this track
+            self.next_sample_indices[track_sid] = end_idx
+
+    async def save_to_wav(self, file_path: str):
+        async with self._lock:
+            if not self.buffer:
+                return False
+                
+            # Pack samples to bytes
+            pcm_bytes = struct.pack(f"<{len(self.buffer)}h", *self.buffer)
+            
+            # Write WAV file
+            with wave.open(file_path, "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2) # 16-bit
+                wav_file.setframerate(self.sample_rate)
+                wav_file.writeframes(pcm_bytes)
+            return True
+
 
 
 class Assistant(Agent):
@@ -107,6 +187,40 @@ async def entrypoint(ctx: JobContext):
     # -----------------------------
     await ctx.connect()
     print("Room connected")
+
+    # Initialize Audio Buffer Mixer for session recording
+    mixer = AudioBufferMixer(sample_rate=16000)
+    mixer.start()
+    active_streams = {}
+
+    async def handle_track(track, sid):
+        print(f"Starting recording stream for track: {sid}")
+        try:
+            stream = rtc.AudioStream(track, sample_rate=16000, num_channels=1)
+            async for frame_event in stream:
+                ts = asyncio.get_event_loop().time()
+                await mixer.add_audio(sid, bytes(frame_event.frame.data), ts)
+        except Exception as e:
+            print(f"Error reading track {sid}: {e}")
+
+    @ctx.room.on("track_subscribed")
+    def on_track_subscribed(track, publication, participant):
+        if track.kind == rtc.TrackKind.KIND_AUDIO:
+            task = asyncio.create_task(handle_track(track, publication.sid))
+            active_streams[publication.sid] = task
+
+    @ctx.room.on("local_track_published")
+    def on_local_track_published(publication, track):
+        if track.kind == rtc.TrackKind.KIND_AUDIO:
+            task = asyncio.create_task(handle_track(track, publication.sid))
+            active_streams[publication.sid] = task
+
+    # Check if there are already any remote tracks to subscribe to
+    for p in ctx.room.remote_participants.values():
+        for pub in p.track_publications.values():
+            if pub.track and pub.track.kind == rtc.TrackKind.KIND_AUDIO and pub.sid not in active_streams:
+                task = asyncio.create_task(handle_track(pub.track, pub.sid))
+                active_streams[pub.sid] = task
 
     # -----------------------------
     # Get participant identity
@@ -331,6 +445,45 @@ async def entrypoint(ctx: JobContext):
             print("ROOM DISCONNECTED")
             print("Closing session...")
             print("🔥 close_db_session called")
+            
+            # 1. Stop all active recording streams
+            for task in active_streams.values():
+                task.cancel()
+            
+            # 2. Save mixed audio to WAV
+            os.makedirs("uploads", exist_ok=True)
+            recording_filename = f"uploads/recording_{db_session.id}.wav"
+            saved = await mixer.save_to_wav(recording_filename)
+            
+            if saved and os.path.exists(recording_filename):
+                try:
+                    from services.imagekit_service import upload_audio
+                    from services.recording_service import recording_service
+                    
+                    print(f"Uploading recording {recording_filename} to ImageKit...")
+                    file_url = await asyncio.to_thread(upload_audio, recording_filename)
+                    print(f"Uploaded successfully: {file_url}")
+                    
+                    duration = None
+                    if mixer.start_time:
+                        duration = int(asyncio.get_event_loop().time() - mixer.start_time)
+                        
+                    await recording_service.create_recording(
+                        session_id=db_session.id,
+                        file_url=file_url,
+                        duration=duration
+                    )
+                    print("Recording saved to database successfully!")
+                    
+                    # Clean up local file
+                    os.remove(recording_filename)
+                except Exception as e:
+                    print(f"Failed to upload or save recording: {e}")
+                    if os.path.exists(recording_filename):
+                        os.remove(recording_filename)
+            else:
+                print("No audio data was recorded for this session.")
+
             print("1")
             messages = (
              
@@ -405,6 +558,9 @@ async def entrypoint(ctx: JobContext):
             print(
                 f"Error closing session: {e}"
             )
+
+
+
 
     @ctx.room.on("disconnected")
     def on_disconnect(*args):

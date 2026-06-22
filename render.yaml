@@ -24,6 +24,12 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
+      - key: IMAGEKIT_PUBLIC_KEY
+        sync: false
+      - key: IMAGEKIT_PRIVATE_KEY
+        sync: false
+      - key: IMAGEKIT_URL_ENDPOINT
+        sync: false
 
   # 2. LiveKit AI Agent Worker (Persistent process)
   - type: worker
@@ -47,4 +53,10 @@ services:
       - key: OPENAI_API_KEY
         sync: false
       - key: GROQ_API_KEY
+        sync: false
+      - key: IMAGEKIT_PUBLIC_KEY
+        sync: false
+      - key: IMAGEKIT_PRIVATE_KEY
+        sync: false
+      - key: IMAGEKIT_URL_ENDPOINT
         sync: false
