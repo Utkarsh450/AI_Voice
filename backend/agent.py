@@ -1,3 +1,16 @@
+import sys
+import asyncio
+
+# ---------------------------------------------------------------
+# Windows psycopg3 compatibility fix:
+# psycopg (psycopg3) used by langchain-postgres/pgvector does NOT
+# support ProactorEventLoop (Windows default). Force SelectorEventLoop
+# BEFORE any other imports so the entire process uses it.
+# On Linux (Render production), this block is skipped automatically.
+# ---------------------------------------------------------------
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -335,107 +348,139 @@ async def entrypoint(ctx: JobContext):
         ),
         preemptive_generation=True,
     )
-            
+
+    # ── Deduplication & fragment-aggregation state ─────────────────────────
+    # Tracks item IDs already saved to prevent double-saves
+    _saved_item_ids: set = set()
+    # Accumulates rapid consecutive USER fragments (VAD splits one sentence
+    # into multiple commits). After FRAGMENT_TIMEOUT seconds of silence,
+    # the accumulated text is saved as ONE message.
+    _fragment_buffer: list = []          # list of (text, timestamp) tuples
+    _fragment_flush_task: asyncio.Task | None = None
+    FRAGMENT_TIMEOUT = 2.0               # seconds to wait before flushing
+    # ──────────────────────────────────────────────────────────────────────
 
     # -----------------------------
     # Save Messages
     # -----------------------------
-    async def save_message(event):
+    async def _flush_user_fragments():
+        """Wait FRAGMENT_TIMEOUT seconds, then save accumulated USER fragments as one message."""
+        nonlocal _fragment_flush_task
+        await asyncio.sleep(FRAGMENT_TIMEOUT)
+        if not _fragment_buffer:
+            return
+        merged_text = " ".join(t for t, _ in _fragment_buffer)
+        _fragment_buffer.clear()
+        _fragment_flush_task = None
         try:
             if not db.is_connected():
                 await db.connect()
-            print("EVENT:", event)
-
-            item = getattr(
-                event,
-                "item",
-                None
+            await message_service.create_message(
+                session_id=db_session.id,
+                speaker="USER",
+                content=merged_text,
             )
+            await publish_event(
+                "transcript_events",
+                {"type": "transcript", "speaker": "USER", "text": merged_text, "sessionId": db_session.id},
+            )
+            await publish_event(
+                "call_state_events",
+                {"type": "state", "state": "thinking", "sessionId": db_session.id},
+            )
+            print(f"USER (merged): {merged_text}")
+        except Exception as e:
+            print(f"Fragment flush error: {e}")
 
+    async def save_message(event):
+        nonlocal _fragment_flush_task
+        try:
+            if not db.is_connected():
+                await db.connect()
+
+            item = getattr(event, "item", None)
             if not item:
                 return
 
-            print("ITEM:", item)
-            print("ITEM DIR:", dir(item))
+            # ── Deduplication: skip if we've already processed this item ──
+            item_id = getattr(item, "id", None)
+            if item_id and item_id in _saved_item_ids:
+                print(f"Skipping duplicate item: {item_id}")
+                return
+            if item_id:
+                _saved_item_ids.add(item_id)
 
-            role = getattr(
-                item,
-                "role",
-                None
-            )
-
+            role = getattr(item, "role", None)
             if not role:
                 return
 
+            # Extract text content
             text = None
-
-            if hasattr(item, "text_content"):
+            if hasattr(item, "text_content") and item.text_content:
                 text = item.text_content
-
             elif hasattr(item, "content"):
                 content = item.content
-
                 if isinstance(content, list):
-                    text = " ".join(
-                        str(x)
-                        for x in content
-                    )
+                    text = " ".join(str(x) for x in content if str(x).strip())
                 else:
                     text = str(content)
 
-            if not text:
+            if not text or not text.strip():
                 return
 
-            speaker = (
-                "USER"
-                if role == "user"
-                else "ASSISTANT"
-            )
-
-            await message_service.create_message(
-                session_id=db_session.id,
-                speaker=speaker,
-                content=text,
-            )
-
-            await publish_event(
-                "transcript_events",
-                {
-                    "type": "transcript",
-                    "speaker": speaker,
-                    "text": text,
-                    "sessionId": db_session.id,
-                },
-            )
-            print("STATE SENT:",speaker)
-            print("TRANSCRIPT SENT:", text)
+            speaker = "USER" if role == "user" else "ASSISTANT"
 
             if speaker == "USER":
-                await publish_event(
-                    "call_state_events",
-                    {
-                        "type": "state",
-                        "state": "thinking",
-                        "sessionId": db_session.id,
-                    },
+                # ── Fragment aggregation ──────────────────────────────────
+                # Cancel any pending flush and accumulate this fragment.
+                # A new flush timer starts; when it fires after FRAGMENT_TIMEOUT
+                # seconds of silence, all fragments are merged into one message.
+                if _fragment_flush_task and not _fragment_flush_task.done():
+                    _fragment_flush_task.cancel()
+                _fragment_buffer.append((text.strip(), asyncio.get_event_loop().time()))
+                _fragment_flush_task = asyncio.create_task(_flush_user_fragments())
+                # ─────────────────────────────────────────────────────────
+            else:
+                # ASSISTANT messages: flush any pending USER fragments first
+                if _fragment_flush_task and not _fragment_flush_task.done():
+                    _fragment_flush_task.cancel()
+                    _fragment_flush_task = None
+                if _fragment_buffer:
+                    merged = " ".join(t for t, _ in _fragment_buffer)
+                    _fragment_buffer.clear()
+                    try:
+                        await message_service.create_message(
+                            session_id=db_session.id, speaker="USER", content=merged
+                        )
+                        await publish_event(
+                            "transcript_events",
+                            {"type": "transcript", "speaker": "USER", "text": merged, "sessionId": db_session.id},
+                        )
+                        print(f"USER (flushed before assistant): {merged}")
+                    except Exception as e:
+                        print(f"Pre-flush error: {e}")
+
+                # Save ASSISTANT message normally
+                await message_service.create_message(
+                    session_id=db_session.id,
+                    speaker="ASSISTANT",
+                    content=text,
                 )
-            print(
-                f"{speaker}: {text}"
-            )
+                await publish_event(
+                    "transcript_events",
+                    {"type": "transcript", "speaker": "ASSISTANT", "text": text, "sessionId": db_session.id},
+                )
+                print(f"ASSISTANT: {text}")
 
         except Exception as e:
-            print(
-                f"Message save error: {e}"
-            )
+            print(f"Message save error: {e}")
 
     # -----------------------------
     # Conversation Event
     # -----------------------------
     @session.on("conversation_item_added")
     def on_conversation_item(event):
-        asyncio.create_task(
-            save_message(event)
-        )
+        asyncio.create_task(save_message(event))
 
     # -----------------------------
     # Handle Disconnect

@@ -3,6 +3,10 @@ import os
 import asyncio
 import uuid
 
+# Set SelectorEventLoop on Windows to support psycopg async mode
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 # Set up paths relative to this script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 backend_dir = os.path.abspath(os.path.join(script_dir, ".."))
@@ -23,20 +27,13 @@ async def main():
     await db.connect()
     
     try:
-        # 2. Clear all entries in the Chroma collection
-        print("Clearing Chroma vector store 'knowledge_base' collection...")
-        collection = rag_service.vectorstore._collection
-        count_before = collection.count()
-        print(f"Current collection count: {count_before}")
-        if count_before > 0:
-            all_data = collection.get()
-            if all_data and "ids" in all_data and all_data["ids"]:
-                collection.delete(ids=all_data["ids"])
-                print(f"Deleted {len(all_data['ids'])} items from Chroma.")
-            else:
-                print("No IDs found to delete.")
-        else:
-            print("Collection is already empty.")
+        # 2. Clear all entries in the PGVectorStore table
+        print("Clearing PGVectorStore 'knowledge_base' table...")
+        try:
+            await db.execute_raw('TRUNCATE TABLE "knowledge_base" CASCADE')
+            print("Truncated table successfully.")
+        except Exception as e:
+            print(f"Table might not exist yet, it will be created on ingestion: {e}")
         
         # 3. Query all documents in DB
         docs = await db.document.find_many()
@@ -79,7 +76,7 @@ async def main():
                     data={"processed": True}
                 )
             except Exception as e:
-                print(f"Failed to ingest document {d.name}: {e}")
+                print(f"Failed to ingest document {d.name}: {repr(e)}")
         
         # 4. Repair/Update Default Personas
         print("\nUpdating default persona descriptions to enable RAG integration...")
@@ -114,8 +111,12 @@ async def main():
                 print(f"WARNING: Persona {name} not found in database.")
                 
         print("\nVerification of final vector store state:")
-        final_count = collection.count()
-        print(f"Final total chunks in Chroma: {final_count}")
+        try:
+            res = await db.query_raw('SELECT COUNT(*)::integer as count FROM "knowledge_base"')
+            final_count = res[0]["count"] if res else 0
+            print(f"Final total chunks in PGVectorStore: {final_count}")
+        except Exception as e:
+            print(f"Could not verify count: {e}")
         
     except Exception as e:
         print(f"An error occurred during re-ingestion: {e}")

@@ -1,12 +1,14 @@
 services:
-  # 1. FastAPI Web Server (API endpoints & WebSocket)
+  # ─────────────────────────────────────────────────────────────────────────
+  # 1. FastAPI Web Server  (API endpoints, WebSocket, admin routes)
+  # ─────────────────────────────────────────────────────────────────────────
   - type: web
     name: ai-voice-api
     env: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: backend
     plan: free
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
       - key: PORT
         value: 10000
@@ -31,7 +33,9 @@ services:
       - key: IMAGEKIT_URL_ENDPOINT
         sync: false
 
-  # 2. LiveKit AI Agent Worker (Persistent process)
+  # ─────────────────────────────────────────────────────────────────────────
+  # 2. LiveKit AI Agent Worker  (background process, handles voice sessions)
+  # ─────────────────────────────────────────────────────────────────────────
   - type: worker
     name: ai-voice-agent
     env: docker
@@ -59,4 +63,22 @@ services:
       - key: IMAGEKIT_PRIVATE_KEY
         sync: false
       - key: IMAGEKIT_URL_ENDPOINT
+        sync: false
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # 3. Next.js Frontend
+  # ─────────────────────────────────────────────────────────────────────────
+  - type: web
+    name: ai-voice-frontend
+    env: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_BACKEND_URL
+        sync: false
+      - key: NEXT_PUBLIC_LIVEKIT_URL
         sync: false

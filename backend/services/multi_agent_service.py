@@ -45,25 +45,42 @@ async def supervisor_node(state: AgentState, personas: List[Persona]) -> Dict[st
 def create_worker_node(persona: Persona):
     """
     Creates a LangGraph node function for a specific Persona.
+    All personas always attempt a RAG search first so answers are
+    grounded in uploaded documents. Falls back gracefully if no
+    relevant docs are found or the store is empty.
     """
     async def worker_node(state: AgentState) -> Dict[str, Any]:
         llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0.3)
         
-        # Build prompt using the Persona's system prompt
         system_prompt = persona.systemPrompt
-        
-        # If this is a Document RAG agent, inject context
-        # (A simple heuristic: if description mentions RAG/Documents, we do a search)
-        context = ""
         last_message = state["messages"][-1].content
-        if "document" in persona.description.lower() or "rag" in persona.description.lower():
-            try:
-                results = await rag_service.search(last_message)
+        
+        # ── RAG: always search uploaded knowledge base ──────────────────
+        context = ""
+        try:
+            results = await rag_service.search(last_message, n_results=4)
+            if results:
                 docs = [doc.page_content for doc in results]
-                context = "\n\nRelevant Document Context:\n" + "\n".join(docs)
-            except Exception as e:
-                context = f"\n\n[Error retrieving documents: {str(e)}]"
-                
+                context = (
+                    "\n\n[Relevant context from uploaded documents — "
+                    "use this information to answer accurately:]\n"
+                    + "\n---\n".join(docs)
+                )
+            else:
+                context = (
+                    "\n\n[No relevant documents found in the knowledge base "
+                    "for this query. Answer based on your general knowledge "
+                    "and make it clear if you are uncertain.]"
+                )
+        except Exception as e:
+            print(f"RAG search error for persona '{persona.name}': {e}")
+            context = (
+                "\n\n[Knowledge base is temporarily unavailable. "
+                "Please answer as best you can and let the user know "
+                "you cannot access documents right now.]"
+            )
+        # ────────────────────────────────────────────────────────────────
+
         messages = [SystemMessage(content=system_prompt + context)] + list(state["messages"])
         response = await llm.ainvoke(messages)
         

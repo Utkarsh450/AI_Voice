@@ -1,3 +1,15 @@
+import sys
+import asyncio
+
+# ---------------------------------------------------------------
+# Windows psycopg3 compatibility fix:
+# psycopg (psycopg3) used by langchain-postgres/pgvector does NOT
+# support the ProactorEventLoop that uvicorn uses on Windows by default.
+# Force SelectorEventLoop before any async code runs.
+# ---------------------------------------------------------------
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from fastapi import FastAPI
 from database.prisma_client import db
 from api.health import router as health_router
@@ -9,7 +21,7 @@ from routes.session_routes import (
 )
 
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
+# asyncio already imported at top
 
 from routes.recording_router import (
     router as recording_router

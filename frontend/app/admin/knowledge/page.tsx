@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Upload, FileText, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload, FileText, CheckCircle2, Loader2, XCircle, AlertTriangle, Trash2 } from "lucide-react";
 import GlassCard from "@/components/admin/GlassCard";
 
 interface Document {
@@ -10,6 +10,7 @@ interface Document {
   path: string;
   uploadedAt: string;
   processed: boolean;
+  failed: boolean;
 }
 
 export default function KnowledgePage() {
@@ -139,7 +140,12 @@ export default function KnowledgePage() {
                     </div>
                     
                     <div>
-                      {doc.processed ? (
+                      {doc.failed ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+                          <XCircle className="h-3.5 w-3.5" />
+                          Failed
+                        </span>
+                      ) : doc.processed ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                           <CheckCircle2 className="h-3.5 w-3.5" />
                           Processed

@@ -1,29 +1,53 @@
 import os
+import asyncio
 from openai import AsyncOpenAI
 
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-
 
 class RAGService:
     def __init__(self):
         self.client = AsyncOpenAI()
+        self.vectorstore = None
+        self._lock = asyncio.Lock()
 
-        self.persist_directory = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "vector_store",
-        )
-
-        os.makedirs(
-            self.persist_directory,
-            exist_ok=True,
-        )
-
-        self.vectorstore = Chroma(
-            persist_directory=self.persist_directory,
-            collection_name="knowledge_base",
-        )
+    async def _get_vectorstore(self):
+        async with self._lock:
+            if self.vectorstore is not None:
+                return self.vectorstore
+                
+            db_url = os.getenv("DATABASE_URL")
+            if not db_url:
+                raise ValueError("DATABASE_URL not found in environment!")
+                
+            # Convert connection string for psycopg3 (required by langchain-postgres)
+            connection = db_url.replace("postgresql://", "postgresql+psycopg://")
+            
+            from langchain_postgres import PGEngine, PGVectorStore
+            from langchain_openai import OpenAIEmbeddings
+            
+            embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+            engine = PGEngine.from_connection_string(connection)
+            
+            # Ensure the pgvector table exists (dimension is 1536 for text-embedding-3-small)
+            try:
+                await engine.ainit_vectorstore_table(
+                    table_name="knowledge_base",
+                    vector_size=1536
+                )
+            except Exception as e:
+                # If table already exists, ignore the error
+                if "already exists" in str(e).lower() or "42P07" in str(e):
+                    pass
+                else:
+                    raise e
+            
+            self.vectorstore = await PGVectorStore.create(
+                engine=engine,
+                table_name="knowledge_base",
+                embedding_service=embeddings
+            )
+            return self.vectorstore
 
     async def ingest_document(
         self,
@@ -31,9 +55,8 @@ class RAGService:
         document_id: int = None,
     ) -> int:
         """
-        Load PDF -> Split -> Embed -> Store in Chroma
+        Load PDF -> Split -> Embed -> Store in PostgreSQL using pgvector
         """
-
         print(f"Ingesting document: {file_path} (ID: {document_id})")
 
         loader = PyPDFLoader(file_path)
@@ -47,49 +70,29 @@ class RAGService:
 
         splits = splitter.split_documents(docs)
 
-        texts = [
-            doc.page_content
-            for doc in splits
-        ]
-
-        embeddings_response = (
-            await self.client.embeddings.create(
-                model="text-embedding-3-small",
-                input=texts,
-            )
-        )
-
-        embeddings = [
-            item.embedding
-            for item in embeddings_response.data
-        ]
-
         import uuid
-        ids = [
-            f"doc_{document_id}_{uuid.uuid4()}" if document_id is not None else f"doc_{uuid.uuid4()}"
-            for _ in range(len(splits))
-        ]
-
-        metadatas = []
+        from langchain_core.documents import Document
+        
+        langchain_docs = []
         for doc in splits:
             meta = {**(doc.metadata or {})}
             if document_id is not None:
                 meta["document_id"] = document_id
-            metadatas.append(meta)
+            
+            doc_uuid = str(uuid.uuid4())
+            
+            langchain_docs.append(
+                Document(
+                    page_content=doc.page_content,
+                    metadata=meta,
+                    id=doc_uuid
+                )
+            )
 
-        self.vectorstore._collection.add(
-            ids=ids,
-            documents=texts,
-            embeddings=embeddings,
-            metadatas=metadatas,
-        )
+        vectorstore = await self._get_vectorstore()
+        await vectorstore.aadd_documents(langchain_docs)
 
-        self.vectorstore.persist()
-
-        print(
-            f"Added {len(splits)} chunks."
-        )
-
+        print(f"Successfully added {len(splits)} chunks to PGVectorStore.")
         return len(splits)
 
     async def search(
@@ -101,46 +104,11 @@ class RAGService:
         Retrieve relevant document chunks for the given query.
         Returns a list of LangChain Document objects.
         """
-        from langchain_core.documents import Document
-
         print(f"Querying vector store for search: {query}")
-
-        query_embedding = (
-            await self.client.embeddings.create(
-                model="text-embedding-3-small",
-                input=query,
-            )
-        )
-
-        embedding = (
-            query_embedding
-            .data[0]
-            .embedding
-        )
-
-        results = (
-            self.vectorstore._collection.query(
-                query_embeddings=[embedding],
-                n_results=n_results,
-            )
-        )
-
-        documents = []
-        if results and "documents" in results and results["documents"]:
-            docs_list = results["documents"][0]
-            metadatas_list = results["metadatas"][0] if "metadatas" in results and results["metadatas"] else [{}] * len(docs_list)
-            ids_list = results["ids"][0] if "ids" in results and results["ids"] else [""] * len(docs_list)
-
-            for doc_text, meta, doc_id in zip(docs_list, metadatas_list, ids_list):
-                documents.append(
-                    Document(
-                        page_content=doc_text,
-                        metadata={**(meta or {}), "id": doc_id}
-                    )
-                )
-
-        print(f"Retrieved {len(documents)} chunks from vector store.")
-        return documents
+        vectorstore = await self._get_vectorstore()
+        results = await vectorstore.asimilarity_search(query, k=n_results)
+        print(f"Retrieved {len(results)} chunks from vector store.")
+        return results
 
     async def query_knowledge_base(
         self,
@@ -149,38 +117,10 @@ class RAGService:
         """
         Retrieve context and answer using GPT-4o-mini
         """
-
-        print(
-            f"Query: {query}"
-        )
-
-        query_embedding = (
-            await self.client.embeddings.create(
-                model="text-embedding-3-small",
-                input=query,
-            )
-        )
-
-        embedding = (
-            query_embedding
-            .data[0]
-            .embedding
-        )
-
-        results = (
-            self.vectorstore._collection.query(
-                query_embeddings=[embedding],
-                n_results=3,
-            )
-        )
-
-        docs = (
-            results["documents"][0]
-            if results["documents"]
-            else []
-        )
-
-        context = "\n\n".join(docs)
+        print(f"Query knowledge base: {query}")
+        
+        docs = await self.search(query, n_results=3)
+        context = "\n\n".join([doc.page_content for doc in docs])
 
         system_prompt = f"""
 You are an expert assistant for a customer support AI agent.
@@ -219,8 +159,5 @@ Context:
             .message
             .content
         )
-
-
-
 
 rag_service = RAGService()

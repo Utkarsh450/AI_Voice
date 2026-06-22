@@ -177,27 +177,29 @@ async def upload_document(file: UploadFile = File(...)):
     
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-        
+
+    doc = None
     try:
         # Upload to ImageKit
         imagekit_url = upload_document_to_imagekit(file_path)
 
-        # Create DB record
+        # Create DB record (initially not processed, not failed)
         doc = await db.document.create(
             data={
                 "name": file.filename,
                 "path": imagekit_url,
-                "processed": False
+                "processed": False,
+                "failed": False,
             }
         )
         
         # Ingest document into vector store
         chunks = await rag_service.ingest_document(file_path, document_id=doc.id)
         
-        # Update DB record
+        # Mark as processed successfully
         await db.document.update(
             where={"id": doc.id},
-            data={"processed": True}
+            data={"processed": True, "failed": False}
         )
         
         # Remove local file after successful ingestion
@@ -205,12 +207,23 @@ async def upload_document(file: UploadFile = File(...)):
             os.remove(file_path)
             
         return {"message": "Document uploaded and processed successfully.", "chunks": chunks, "document": doc}
+
     except Exception as e:
         print(f"Error processing document: {e}")
         # Cleanup local file on error
         if os.path.exists(file_path):
             os.remove(file_path)
+        # Mark the DB record as failed so the UI shows "Failed" instead of "Processing"
+        if doc:
+            try:
+                await db.document.update(
+                    where={"id": doc.id},
+                    data={"failed": True, "processed": False}
+                )
+            except Exception as db_err:
+                print(f"Could not mark document as failed: {db_err}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/knowledge/documents")
 async def get_documents():
