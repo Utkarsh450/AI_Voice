@@ -17,7 +17,7 @@ async def supervisor_node(state: AgentState, personas: List[Persona]) -> Dict[st
     """
     The Supervisor reads the query and routes it to the most relevant Persona.
     """
-    llm = ChatGroq(model="llama3-8b-8192", temperature=0)
+    llm = ChatGroq(model="llama-3.1-8b-instant", temperature=0)
     
     # Build routing options dynamically from DB Personas
     system_prompt = "You are a Supervisor Agent. Your job is to route the conversation to the most appropriate specialized worker agent based on the user's latest message.\n\n"
@@ -72,7 +72,7 @@ def create_worker_node(persona: Persona):
         }
     return worker_node
 
-async def run_specialist_network(query: str, chat_history: List[Dict[str, str]] = None) -> str:
+async def run_specialist_network(query: str, chat_history: List[Dict[str, str]] = None, session_id: int = None) -> str:
     """
     Executes the multi-agent graph for a given query.
     """
@@ -88,7 +88,9 @@ async def run_specialist_network(query: str, chat_history: List[Dict[str, str]] 
     workflow = StateGraph(AgentState)
     
     # Add Supervisor
-    workflow.add_node("supervisor", lambda state: supervisor_node(state, personas))
+    async def supervisor_wrapper(state: AgentState) -> Dict[str, Any]:
+        return await supervisor_node(state, personas)
+    workflow.add_node("supervisor", supervisor_wrapper)
     
     # Add Worker Nodes
     for p in personas:
@@ -131,4 +133,27 @@ async def run_specialist_network(query: str, chat_history: List[Dict[str, str]] 
     
     # Extract final response from the last message
     last_msg = final_state["messages"][-1]
+    
+    # Update Session Persona in DB & Publish WebSocket update
+    selected_agent = final_state.get("next_agent")
+    if selected_agent and selected_agent != "FINISH" and session_id:
+        try:
+            await db.session.update(
+                where={"id": session_id},
+                data={"persona": selected_agent}
+            )
+            print(f"Updated session {session_id} persona in DB to {selected_agent}")
+            
+            from services.event_publisher import publish_event
+            await publish_event(
+                "call_state_events",
+                {
+                    "type": "persona_update",
+                    "persona": selected_agent,
+                    "sessionId": session_id,
+                },
+            )
+        except Exception as db_err:
+            print(f"Failed to update session persona: {db_err}")
+            
     return last_msg.content

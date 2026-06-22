@@ -192,7 +192,7 @@ async def upload_document(file: UploadFile = File(...)):
         )
         
         # Ingest document into vector store
-        chunks = await rag_service.ingest_document(file_path)
+        chunks = await rag_service.ingest_document(file_path, document_id=doc.id)
         
         # Update DB record
         await db.document.update(

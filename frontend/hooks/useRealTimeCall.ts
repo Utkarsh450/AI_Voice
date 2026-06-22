@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { CallState } from "@/types/call";
 import { LiveMessage } from "@/types/message";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function useRealtimeCall(sessionId: number | null) {
+  const queryClient = useQueryClient();
   const [transcript, setTranscript] = useState("");
 
   const [messages, setMessages] = useState<LiveMessage[]>([]);
@@ -80,6 +82,16 @@ console.log("WS DATA:", data);
     }, 2500);
   }
 }
+      }
+
+      if (data.type === "persona_update") {
+        console.log("Persona update received:", data.persona);
+        queryClient.invalidateQueries({
+          queryKey: ["session", sessionId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["sessions"],
+        });
       }
     };
 

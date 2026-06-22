@@ -80,7 +80,7 @@ CRITICAL LATENCY RULE: When the 'consult_specialist_network' function returns an
             messages = await message_service.get_session_messages(self.session_id)
             history = [{"role": m.speaker.lower(), "content": m.content} for m in messages[-5:]]
             
-            answer = await run_specialist_network(query, history)
+            answer = await run_specialist_network(query, history, self.session_id)
             return f"Specialist Agent Answer: {answer}"
         except Exception as e:
             print(f"Error in specialist network: {e}")
