@@ -107,22 +107,22 @@ export default function AdminSidebar({ isOpen, onClose }: Props) {
               href={item.href}
               onClick={onClose}
               className={`
-                flex items-center gap-3.5
+                flex items-center gap-3
                 rounded-xl
-                px-6 py-5 relative overflow-hidden
+                px-4.5 py-3 border relative overflow-hidden
                 transition-all duration-300 group
-                \${
+                ${
                   isActive
-                    ? "bg-blue-900/30 hover:bg-blue-900/10 text-blue-400 border-none font-bold"
-                    : "text-slate-400 hover:bg-slate-900/10 hover:text-slate-200"
+                    ? "bg-gradient-to-r from-blue-500/12 to-indigo-500/8 border-blue-500/30 text-white font-semibold shadow-[0_0_15px_rgba(59,130,246,0.05)]"
+                    : "text-slate-400 border-transparent hover:bg-white/[0.03] hover:text-slate-200"
                 }
               `}
             >
               {isActive && (
                 <span className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-blue-500 to-indigo-500 rounded-r-md" />
               )}
-              <Icon size={18} className={`transition-transform duration-300 group-hover:scale-105 \${isActive ? "text-blue-400" : "text-slate-500"}`} />
-              <span className="text-sm font-medium tracking-wide">{item.name}</span>
+              <Icon size={18} className={`transition-all duration-300 group-hover:scale-105 ${isActive ? "text-blue-400" : "text-slate-500 group-hover:text-slate-300"}`} />
+              <span className="text-[13.5px] font-medium tracking-wide">{item.name}</span>
             </Link>
           );
         })}
@@ -142,25 +142,24 @@ export default function AdminSidebar({ isOpen, onClose }: Props) {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
               )}
               <span
-                className={`relative inline-flex rounded-full h-2 w-2 ${
-                  isHealthLoading
+                className={`relative inline-flex rounded-full h-2 w-2 ${isHealthLoading
                     ? "bg-slate-600"
                     : isHealthy
-                    ? "bg-emerald-500"
-                    : isOutage
-                    ? "bg-rose-500"
-                    : "bg-amber-500"
-                }`}
+                      ? "bg-emerald-500"
+                      : isOutage
+                        ? "bg-rose-500"
+                        : "bg-amber-500"
+                  }`}
               />
             </span>
             <span className="font-medium text-slate-300">
               {isHealthLoading
                 ? "Monitoring services..."
                 : isHealthy
-                ? `System Healthy (${onlineCount}/${totalCount})`
-                : isOutage
-                ? `System Outage (${onlineCount}/${totalCount} Online)`
-                : `Degraded (${onlineCount}/${totalCount} Online)`}
+                  ? `System Healthy (${onlineCount}/${totalCount})`
+                  : isOutage
+                    ? `System Outage (${onlineCount}/${totalCount} Online)`
+                    : `Degraded (${onlineCount}/${totalCount} Online)`}
             </span>
           </div>
         </div>
