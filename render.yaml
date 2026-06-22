@@ -34,16 +34,21 @@ services:
         sync: false
 
   # ─────────────────────────────────────────────────────────────────────────
-  # 2. LiveKit AI Agent Worker  (background process, handles voice sessions)
+  # 2. LiveKit AI Agent  (runs as a web service — free plan compatible)
+  #    The LiveKit agent has a built-in HTTP health server that binds to PORT.
+  #    Render's "worker" type requires a paid plan; using "web" here instead.
   # ─────────────────────────────────────────────────────────────────────────
-  - type: worker
+  - type: web
     name: ai-voice-agent
     env: docker
     dockerfilePath: backend/Dockerfile
     dockerContext: backend
     dockerCommand: python agent.py start
     plan: free
+    healthCheckPath: /
     envVars:
+      - key: PORT
+        value: 8081
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL

@@ -661,10 +661,13 @@ async def entrypoint(ctx: JobContext):
 
 
 if __name__ == "__main__":
+    # On Render (and other cloud platforms), use the PORT env var for the
+    # agent's built-in HTTP health server so it can run as a "web" service.
+    agent_port = int(os.environ.get("PORT", 8081))
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
             agent_name="voice-agent",
+            port=agent_port,
         )
-    
     )
