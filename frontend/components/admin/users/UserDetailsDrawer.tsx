@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 
 import { useUser } from "@/hooks/useUser";
+import { api } from "@/services/api";
 
 interface Props {
   userId: string | null;
@@ -21,6 +22,7 @@ interface Props {
 export default function UserDetailsDrawer({ userId, onClose }: Props) {
   const { data, isLoading } = useUser(userId ?? undefined);
   const [copied, setCopied] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const getInitials = (id: string) => {
     if (!id) return "?";
@@ -60,6 +62,27 @@ export default function UserDetailsDrawer({ userId, onClose }: Props) {
     navigator.clipboard.writeText(data.memory);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDelete = async () => {
+    if (!userId) return;
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this user and all their call recordings, messages, and memories? This action cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    try {
+      await api.delete(`/admin/users/${userId}`);
+      onClose();
+      // Wait a moment for DB to update, then reload page or mutate list
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      alert("Failed to delete user. Check console for details.");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -221,6 +244,25 @@ export default function UserDetailsDrawer({ userId, onClose }: Props) {
                   ))
                 )}
               </div>
+            </div>
+
+            {/* DANGER ZONE */}
+            <div className="rounded-3xl border border-red-900/30 bg-red-950/10 p-6 mt-8">
+              <div className="mb-4">
+                <h3 className="font-bold text-red-400 text-sm uppercase tracking-wider">
+                  Danger Zone
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Permanently delete this caller, their global memory, and all their past session transcripts and recordings.
+                </p>
+              </div>
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="w-full py-3 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold text-sm tracking-wide border border-red-500/20 transition-all uppercase disabled:opacity-50"
+              >
+                {isDeleting ? "Deleting..." : "Delete User Data"}
+              </button>
             </div>
           </div>
         )}

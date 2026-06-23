@@ -42,11 +42,11 @@ export default function AnalyticsPage() {
       <div className="space-y-6 animate-pulse">
         <div className="h-10 w-48 bg-slate-800 rounded-lg"></div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {[1, 2, 3].map(i => <GlassCard key={i} className="h-32 bg-slate-800/50" />)}
+          {[1, 2, 3].map(i => <GlassCard key={i} className="h-32 bg-slate-800/50"><div /></GlassCard>)}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <GlassCard className="h-96 bg-slate-800/50" />
-          <GlassCard className="h-96 bg-slate-800/50" />
+          <GlassCard className="h-96 bg-slate-800/50"><div /></GlassCard>
+          <GlassCard className="h-96 bg-slate-800/50"><div /></GlassCard>
         </div>
       </div>
     );

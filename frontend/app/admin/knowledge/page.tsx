@@ -30,6 +30,24 @@ export default function KnowledgePage() {
     }
   };
 
+  const handleDeleteDocument = async (id: number) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to permanently delete this document and all its vector chunks? This will affect the AI's knowledge base."
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`http://localhost:8000/admin/knowledge/documents/${id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      await fetchDocuments();
+    } catch (error) {
+      console.error("Failed to delete document:", error);
+      alert("Failed to delete document");
+    }
+  };
+
   useEffect(() => {
     fetchDocuments();
   }, []);
@@ -139,7 +157,7 @@ export default function KnowledgePage() {
                       </div>
                     </div>
                     
-                    <div>
+                    <div className="flex items-center gap-3">
                       {doc.failed ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/20">
                           <XCircle className="h-3.5 w-3.5" />
@@ -156,6 +174,14 @@ export default function KnowledgePage() {
                           Processing
                         </span>
                       )}
+                      
+                      <button
+                        onClick={() => handleDeleteDocument(doc.id)}
+                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        title="Delete Document"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 ))}

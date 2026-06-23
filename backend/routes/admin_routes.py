@@ -125,6 +125,16 @@ async def get_user(
         )
     )
 
+from services.user_service import delete_user_data
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str):
+    success = await delete_user_data(user_id)
+    if not success:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Failed to delete user")
+    return {"message": "User deleted"}
+
 
 # ==========================
 # Monitoring
@@ -231,6 +241,29 @@ async def get_documents():
         order={"uploadedAt": "desc"}
     )
     return docs
+
+@router.delete("/knowledge/documents/{document_id}")
+async def delete_knowledge_document(document_id: int):
+    import asyncio
+    
+    # 1. Synchronously delete from Prisma DB so the UI fetches instantly reflect the change
+    try:
+        await db.document.delete(where={"id": document_id})
+    except Exception as e:
+        print(f"Failed to delete document from DB: {e}")
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail="Failed to delete document from database")
+
+    # 2. Asynchronously delete the heavy Vector Store chunks in the background
+    async def _delete_doc_background():
+        try:
+            await rag_service.delete_document(document_id)
+        except Exception as e:
+            print(f"Failed to delete document from vector store: {e}")
+
+    asyncio.create_task(_delete_doc_background())
+        
+    return {"message": "Document deleted"}
 
 # ==========================
 # Personas

@@ -160,4 +160,30 @@ Context:
             .content
         )
 
+    async def delete_document(self, document_id: int) -> bool:
+        """
+        Delete all vector chunks associated with a document_id from PostgreSQL.
+        """
+        print(f"Deleting vector chunks for document ID: {document_id}")
+        try:
+            if not hasattr(self, 'engine'):
+                db_url = os.getenv("DATABASE_URL")
+                connection = db_url.replace("postgresql://", "postgresql+psycopg://")
+                from sqlalchemy.ext.asyncio import create_async_engine
+                self.engine = create_async_engine(connection, pool_size=5, max_overflow=10)
+            
+            from sqlalchemy import text
+            
+            async with self.engine.begin() as conn:
+                # langchain-postgres stores metadata in the 'cmetadata' JSONB column.
+                # We cast the JSON extracted value to an integer for exact matching.
+                query = text("DELETE FROM knowledge_base WHERE (langchain_metadata->>'document_id')::int = :doc_id")
+                await conn.execute(query, {"doc_id": document_id})
+                
+            print(f"Successfully deleted vectors for document ID: {document_id}")
+            return True
+        except Exception as e:
+            print(f"Error deleting document vectors: {e}")
+            return False
+
 rag_service = RAGService()

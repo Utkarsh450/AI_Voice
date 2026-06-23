@@ -71,7 +71,7 @@ export default function SettingsPage() {
       <div className="space-y-6 animate-pulse">
         <div className="h-10 w-48 bg-slate-800 rounded-lg"></div>
         <div className="space-y-4">
-          <GlassCard className="h-64 bg-slate-800/50" />
+          <GlassCard className="h-64 bg-slate-800/50"><div /></GlassCard>
         </div>
       </div>
     );

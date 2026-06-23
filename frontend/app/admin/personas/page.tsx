@@ -112,7 +112,7 @@ export default function PersonasPage() {
       {loading ? (
         <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
-            <GlassCard key={i} className="h-64 animate-pulse bg-slate-900/50" />
+            <GlassCard key={i} className="h-64 animate-pulse bg-slate-900/50"><div /></GlassCard>
           ))}
         </div>
       ) : personas.length === 0 ? (
